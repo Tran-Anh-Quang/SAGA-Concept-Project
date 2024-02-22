@@ -5,10 +5,13 @@ import com.quangta.orderservice.dto.OrderLineItemsDTO;
 import com.quangta.orderservice.dto.OrderRequest;
 import com.quangta.orderservice.entity.Order;
 import com.quangta.orderservice.entity.OrderLineItems;
+import com.quangta.orderservice.event.OrderPlacedEvent;
 import com.quangta.orderservice.repository.OrderRepository;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -29,6 +32,8 @@ public class OrderService {
 
     private final Tracer tracer;
 
+    @Autowired
+    private final KafkaTemplate<String, OrderPlacedEvent> kafkaTemplate;
     public String placeOrder(OrderRequest orderRequest) {
         Order order = new Order();
         order.setOrderNumber(UUID.randomUUID().toString());
@@ -59,6 +64,7 @@ public class OrderService {
 
             if (allProductsInStock) {
                 orderRepository.save(order);
+                kafkaTemplate.send("notificationTopic", new OrderPlacedEvent(order.getOrderNumber()));
                 return "Order Placed Successfully";
             } else {
                 throw new IllegalStateException("Product is not in stock, please try again later");
